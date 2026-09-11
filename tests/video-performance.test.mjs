@@ -72,7 +72,7 @@ assert.match(playerCss, /\.listLibraryTools/);
 assert.match(playerCss, /#top\{display:none!important\}/);
 assert.match(playerCss, /\.mobileSearchPanel\.open/);
 assert.match(playerCss, /#playerModal \.playerSide\.drawerOpen/);
-assert.match(worker, /resenhaflix-shell-v62/);
+assert.match(worker, /resenhaflix-shell-v63/);
 assert.match(worker, /\.\/app\.js\?v=62/);
 assert.match(worker, /\.\/watch-party\.js\?v=61/);
 assert.match(worker, /\.\/watch-party\.css\?v=61/);

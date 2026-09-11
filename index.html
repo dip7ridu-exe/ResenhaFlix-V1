@@ -2028,6 +2028,7 @@ input::placeholder,textarea::placeholder{color:#898294;opacity:1}
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="./watch-party.css?v=61">
 <link rel="stylesheet" href="./books-v62.css?v=62">
+<link rel="stylesheet" href="./download-menu.css?v=63">
 </head>
 <body>
 <svg class="rfIconSprite" aria-hidden="true">
@@ -2050,7 +2051,7 @@ input::placeholder,textarea::placeholder{color:#898294;opacity:1}
  <symbol id="rf-icon-party" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3"/><path d="M3 19v-1a5 5 0 0 1 5-5h1a5 5 0 0 1 5 5v1M16 6a2.7 2.7 0 0 1 0 5.4M16.2 13.5a4.5 4.5 0 0 1 4.3 4.5v1"/><path fill="currentColor" stroke="none" d="m9.5 6.2 4.2 2.55-4.2 2.55V6.2Z"/></symbol>
 </svg>
 <header class="top" id="top">
- <button type="button" class="logo" id="logoHome" aria-label="Ir para o início"><img src="./icons/resenhaflix-logo.png?v=54" alt=""><span>RESENHA<b>FLIX</b></span></button>
+ <button type="button" class="logo" id="logoHome" aria-label="Baixar o Navegar na Resenha" aria-haspopup="dialog" aria-expanded="false" aria-controls="appDownloadMenu"><img src="./icons/resenhaflix-logo.png?v=54" alt=""><span>RESENHA<b>FLIX</b></span></button>
  <nav class="nav">
   <button type="button" class="categoriesNavBtn" id="categoriesNavBtn">Categorias <span>⌄</span></button>
   <button class="active" data-page="home">Início</button>
@@ -2069,6 +2070,47 @@ input::placeholder,textarea::placeholder{color:#898294;opacity:1}
   <button class="iconbtn" id="settingsBtn" aria-label="Configurações"><svg class="rfIcon"><use href="#rf-icon-settings"></use></svg></button>
  </div>
 </header>
+
+<div class="appDownloadMenu" id="appDownloadMenu" hidden>
+ <button type="button" class="appDownloadBackdrop" id="appDownloadBackdrop" aria-label="Fechar opções de download"></button>
+ <section class="appDownloadPanel" role="dialog" aria-modal="false" aria-labelledby="appDownloadTitle" tabindex="-1">
+  <div class="appDownloadArrow" aria-hidden="true"></div>
+  <header class="appDownloadHeader">
+   <img src="./icons/resenhaflix-logo.png?v=54" alt="" width="52" height="52">
+   <div>
+    <span>NAVEGAR NA RESENHA</span>
+    <h2 id="appDownloadTitle">Escolha sua versão</h2>
+   </div>
+   <button type="button" class="appDownloadClose" id="appDownloadClose" aria-label="Fechar opções de download">×</button>
+  </header>
+
+  <div class="appDownloadOptions">
+   <a class="appDownloadOption" data-download-platform="windows" href="https://github.com/dip7ridu-exe/ResenhaFlix-V1/releases/download/navegar-na-resenha-v0.1.0/Navegar-na-Resenha-Windows-x64-v0.1.0.zip">
+    <span class="appDownloadIcon" aria-hidden="true">
+     <svg viewBox="0 0 24 24"><path d="M3 5.2 10.8 4v7.4H3V5.2Zm8.9-1.4L21 2.5v8.9h-9.1V3.8ZM3 12.6h7.8V20L3 18.8v-6.2Zm8.9 0H21v8.9l-9.1-1.3v-7.6Z"/></svg>
+    </span>
+    <span class="appDownloadCopy">
+     <strong>Versão para PC</strong>
+     <small>Windows 64 bits · arquivo ZIP · 151 MB</small>
+    </span>
+    <span class="appDownloadAction">Baixar <b aria-hidden="true">↓</b></span>
+   </a>
+
+   <a class="appDownloadOption" data-download-platform="android" href="https://github.com/dip7ridu-exe/ResenhaFlix-V1/releases/download/navegar-na-resenha-v0.1.0/Navegar-na-Resenha-Android-universal-v0.1.0.apk">
+    <span class="appDownloadIcon" aria-hidden="true">
+     <svg viewBox="0 0 24 24"><path d="m7.1 5.2-1.3-2a.7.7 0 0 1 1.2-.7l1.4 2.1a8.8 8.8 0 0 1 7.2 0L17 2.5a.7.7 0 0 1 1.2.7l-1.3 2A6.5 6.5 0 0 1 19.5 10h-15a6.5 6.5 0 0 1 2.6-4.8ZM8 7.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM4.5 11h15v7.5a2 2 0 0 1-2 2h-1V23h-2v-2.5h-5V23h-2v-2.5h-1a2 2 0 0 1-2-2V11Z"/></svg>
+    </span>
+    <span class="appDownloadCopy">
+     <strong>Versão mobile</strong>
+     <small>Android · APK universal · 50 MB</small>
+    </span>
+    <span class="appDownloadAction">Baixar <b aria-hidden="true">↓</b></span>
+   </a>
+  </div>
+
+  <p class="appDownloadNote">Versão 0.1.0 · Downloads hospedados no GitHub</p>
+ </section>
+</div>
 
 <div class="categoryMega" id="categoryMega" aria-hidden="true">
  <div class="categoryMegaInner">
@@ -2450,5 +2492,6 @@ input::placeholder,textarea::placeholder{color:#898294;opacity:1}
 
 
   <script src="./ui-polish.js?v=56"></script>
+  <script src="./download-menu.js?v=63"></script>
 </body>
 </html>
