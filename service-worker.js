@@ -3,8 +3,8 @@
    - Scripts, estilos e ícones versionados (?v=): cache primeiro. Como cada
      atualização muda o ?v=, o arquivo novo é baixado só uma vez, e as visitas
      seguintes abrem instantaneamente, sem baixar ~250 KB de JS de novo. */
-const CACHE="resenhaflix-shell-v71";
-const SHELL=["./","./index.html","./resenhaflix.css?v=71","./catalog-ptbr.js?v=71","./app.js?v=71","./watch-party.js?v=71","./download-menu.js?v=71","./manifest.webmanifest","./icons/resenhaflix-logo.png?v=70","./icons/icon-192.png?v=70","./icons/icon-512.png?v=70","./icons/icon-maskable-512.png?v=70"];
+const CACHE="resenhaflix-shell-v72";
+const SHELL=["./","./index.html","./resenhaflix.css?v=72","./catalog-ptbr.js?v=72","./app.js?v=72","./watch-party.js?v=72","./download-menu.js?v=72","./manifest.webmanifest","./icons/resenhaflix-logo.png?v=70","./icons/icon-192.png?v=70","./icons/icon-512.png?v=70","./icons/icon-maskable-512.png?v=70"];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith("resenhaflix-shell-")&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 function store(request,response){

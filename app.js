@@ -33,9 +33,14 @@ function isBlockedStreamManifest(value){
   return BLOCKED_STREAM_HOSTS.has(host)||CATALOG_ONLY_HOSTS.has(host)
  }catch{return true}
 }
+const FROST_PUBLIC_MANIFEST="https://froststream.cloutteam.com/manifest.json";
 function sanitizeStreamManifests(value){
- const current=String(value||"").split(/[\n,]+/).map(x=>x.trim()).filter(Boolean);
- return [...new Set([...REQUIRED_STREAM_MANIFESTS,...current.filter(url=>!isBlockedStreamManifest(url))])].slice(0,6)
+ const current=String(value||"").split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter(url=>!isBlockedStreamManifest(url));
+ // v72: a FrostStream passou a exigir conta. Se você colar o seu endereço pessoal
+ // (froststream.cloutteam.com/...seu-código.../manifest.json), ele ocupa o lugar do público.
+ const personalFrost=current.find(url=>/froststream\.cloutteam\.com\/.+\/manifest\.json/i.test(url)&&url!==FROST_PUBLIC_MANIFEST);
+ const required=REQUIRED_STREAM_MANIFESTS.map(url=>url===FROST_PUBLIC_MANIFEST&&personalFrost?personalFrost:url);
+ return [...new Set([...required,...current.filter(url=>!(personalFrost&&url===FROST_PUBLIC_MANIFEST))])].slice(0,6)
 }
 savedStreams=sanitizeStreamManifests(savedStreams).join("\n");
 localStorage.setItem("cf2_frost",savedStreams);
@@ -569,7 +574,11 @@ function sourceReliabilityScore(s,resumeEntry=null){
  if(s._torrent)score-=260;
  if(s._needsHeaders)score-=120; // exigem cabeçalhos que o navegador não envia
  if(s._trial)score-=150;        // links de teste/debrid costumam pedir cadastro
- if(s._notWebReady)score-=25;   // feitos para o app; no navegador às vezes abrem
+ if(s._notWebReady&&!s._relay)score-=25;   // feitos para o app; no navegador às vezes abrem
+ if(s._dub)score+=90;           // dublado / dual áudio primeiro
+ else if(s._pt)score+=40;       // legendado em português
+ if(s._blockedHost)score-=400;  // servidor recusa o navegador
+ if(s._relay)score+=S.stremioServer?20:-1500; // precisa do Stremio aberto no computador
  if(s._external)score-=500;
  if(s._mismatch)score-=900;
  return score;
@@ -1318,6 +1327,39 @@ async function fetchStreamPayload(manifest,type,id){
   }
  }
 }
+// v72: servidor do Stremio no computador. Quando o app Stremio está aberto, ele roda
+// um servidor em 127.0.0.1:11470 que busca e converte vídeos que o navegador não
+// consegue abrir sozinho (links "http" e redirecionamentos da FenixFlix e da Zeus).
+const STREMIO_SERVER_KEY="rf72_stremio_server",STREMIO_SERVER_DEFAULT="http://127.0.0.1:11470";
+let stremioServerCheck=null,stremioServerCheckedAt=0;
+function stremioServerBase(){return String(localStorage.getItem(STREMIO_SERVER_KEY)||STREMIO_SERVER_DEFAULT).trim().replace(/\/+$/,"")}
+function detectStremioServer(force=false){
+ if(stremioServerCheck&&!force&&(S.stremioServer||Date.now()-stremioServerCheckedAt<20000))return stremioServerCheck;
+ const base=stremioServerBase();stremioServerCheckedAt=Date.now();
+ stremioServerCheck=getJSONTimeout(base+"/settings",1800).then(d=>d&&d.values?base:null).catch(()=>null).then(found=>{S.stremioServer=found;return found});
+ return stremioServerCheck;
+}
+// Links que o navegador bloqueia: "http" dentro de site "https" e os redirecionamentos /r/ da FenixFlix.
+function streamNeedsRelay(s){
+ const url=String(s?.url||"");
+ if(!url||s._torrent)return false;
+ if(/^http:\/\//i.test(url))return true;
+ return /fenixflix\.fenixhub\.online\/r\//i.test(url);
+}
+// Hosts que recusam navegador e também o conversor (pedem cabeçalhos próprios).
+const BROWSER_BLOCKED_HOSTS=/(^|\.)embedplayer2\.xyz$/i;
+function streamHostBlocked(s){try{return BROWSER_BLOCKED_HOSTS.test(new URL(s.url).hostname)}catch{return false}}
+function relayPlaybackUrl(stream){
+ const id="rf"+stableHash(stream.url).toString(36);
+ return `${S.stremioServer}/hlsv2/${id}/master.m3u8?mediaURL=${encodeURIComponent(stream.url)}`;
+}
+// Português: dublado, dual áudio, nacional ou legendado em PT.
+const PT_TEXT=/🇧🇷|dublad|\bdub\b|pt[-_ ]?br|portugu|nacional|\bdual\b|dual[- ]?(audio|áudio)|multi[- ]?(lang|audio|áudio)|legendad/i;
+const PT_DUB_TEXT=/🇧🇷|dublad|nacional|\bdual\b|dual[- ]?(audio|áudio)|pt[-_ ]?br\s*(audio|áudio)/i;
+const HIGH_QUALITY=new Set(["720p","1080p","1440p","4K"]);
+// NoTorrent: só opções em português e em 720p ou mais (pedido do dono do site).
+function keepOnlyPortugueseHighQuality(manifest){return /notorrent/i.test(manifest)}
+
 // Links que as fontes misturam com os vídeos (doação, Discord, planos pagos).
 const PROMO_LINK_HOSTS=/(^|\.)(paypal\.com|paypal\.me|discord\.gg|discord\.com|patreon\.com|ko-fi\.com|buymeacoffee\.com|t\.me|telegram\.me|linktr\.ee)$/i;
 function isPromoStream(s){
@@ -1347,6 +1389,7 @@ async function fetchStreamBatch(manifest,type,id,index,{fresh=false}={}){
  if(!addonSupports(manifest,"stream",type,id)){saveStreamBatch(manifest,type,id,[]);return []}
  const data=await fetchStreamPayload(manifest,type,id);
  const officialLegal=/watchhub\.strem\.io/i.test(manifest);
+ const strict=keepOnlyPortugueseHighQuality(manifest);
  const streams=(Array.isArray(data?.streams)?data.streams:[]).map(s=>{
   if(!s||typeof s!=="object")return null;
   if(!s.url&&!s.externalUrl&&s.infoHash)return null;
@@ -1355,12 +1398,13 @@ async function fetchStreamBatch(manifest,type,id,index,{fresh=false}={}){
   if(!s.title&&s.description)return {...s,title:s.description};
   return s;
  }).filter(x=>x&&(x.url||x.externalUrl)&&!isPromoStream(x)).map((s,i)=>{
-  const text=`${s.name||""} ${s.title||""}`;
-  const x={...s,_addon:name,_manifest:manifest,_idx:i,_quality:getQuality(s),_external:!s.url&&!s._torrent&&!!s.externalUrl,_officialLegal:officialLegal,
+  const text=`${s.name||""} ${s.title||""} ${s.description||""} ${s.behaviorHints?.filename||""}`;
+  const x={...s,_pt:PT_TEXT.test(text),_dub:PT_DUB_TEXT.test(text),_relay:streamNeedsRelay(s),_blockedHost:!!s.url&&streamHostBlocked(s),_addon:name,_manifest:manifest,_idx:i,_quality:getQuality(s),_external:!s.url&&!s._torrent&&!!s.externalUrl,_officialLegal:officialLegal,
    _hls:!!s.url&&looksLikeHls(s),_needsHeaders:hasRequestHeaders(s),_notWebReady:!!s.behaviorHints?.notWebReady,_trial:/free\s*trial|debrid|premiumize|linksnappy|alldebrid/i.test(text)};
   x._provider=detectProvider(x);x._mismatch=streamLooksMismatched(x,S.streamMeta,type);return x;
  });
- saveStreamBatch(manifest,type,id,streams);return streams;
+ const kept=strict?streams.filter(x=>x._pt&&HIGH_QUALITY.has(x._quality)):streams;
+ saveStreamBatch(manifest,type,id,kept);return kept;
 }
 function mergeStreamBatches(current,batch){
  const map=new Map();
@@ -1380,13 +1424,15 @@ async function loadStreamsFromAddons(type,id,onBatch=null,onStatus=null){
   publish(manifest,index,"loading",0);
   return fetchStreamBatch(manifest,type,id,index)
    .then(batch=>{publish(manifest,index,batch.length?"ready":"empty",batch.length);if(onBatch)onBatch(batch,manifest);return batch})
-   .catch(e=>{const status=e?.name==="AbortError"?"timeout":"failed";publish(manifest,index,status,0,String(e?.message||e||""));console.warn("Addon lento/indisponível",manifest,e);return []});
+   .catch(e=>{const status=e?.name==="AbortError"?"timeout":"failed";
+    if(/froststream/i.test(manifest)&&/HTTP 401/.test(String(e?.message||""))&&!S._frostWarned){S._frostWarned=true;toast("FrostStream agora exige conta: crie a sua no site deles e cole o seu endereço pessoal em Configurações → Avançado.")}publish(manifest,index,status,0,String(e?.message||e||""));console.warn("Addon lento/indisponível",manifest,e);return []});
  });
  const results=await Promise.all(jobs);
  return results.flat();
 }
 async function retryStreamSources(){
  const id=S.resolvedStreamId||S.playId,type=S.playType,button=$("#retrySourcesBtn");
+ await detectStremioServer(true);
  if(!id||!type)return toast("Abra um filme ou episódio antes de tentar novamente.");
  const manifests=sortStreamManifests(configuredStreamManifests());
  let targets=manifests.filter(manifest=>!["ready","loading"].includes(S.addonQueryStatus.get(manifest)?.status));
@@ -1457,6 +1503,8 @@ function sourceStatusLabel(s){
  if(h==="working")return"Funcionando";
  if(h==="testing")return"Testando…";
  if(h==="failed")return st.lastStall&&Date.now()-st.lastStall<2*3600e3?"Instável":"Falhou";
+ if(s._relay&&!S.stremioServer)return "Precisa do Stremio aberto";
+ if(s._relay)return "Via Stremio";
  return s._external?"Externo":s._torrent?"Torrent online":"Disponível";
 }
 function sourceStatusIcon(s){
@@ -1611,9 +1659,16 @@ async function attemptSource(stream,autoplay=true,resumeEntry=null){
  setHealth(stream,"testing");
  scheduleSourceUIRender();
 
+ let playbackUrl=stream.url;
+ if(stream._relay){
+  const server=S.stremioServer||await detectStremioServer();
+  if(token!==S.sourceAttemptToken)return false;
+  if(!server){setHealth(stream,"failed","needs-stremio");rememberSourceResult(stream,false,"needs-stremio");return false}
+  playbackUrl=relayPlaybackUrl(stream);stream._hls=true;
+ }
  try{
   if(stream._torrent)await loadTorrentVideo(stream,autoplay,resumeEntry);
-  else await loadVideo(stream.url,autoplay,stream,resumeEntry);
+  else await loadVideo(playbackUrl,autoplay,stream,resumeEntry);
  }catch(e){
   console.warn("Falha preparando a fonte",e);
   setHealth(stream,"failed","prepare-error");
@@ -1621,7 +1676,8 @@ async function attemptSource(stream,autoplay=true,resumeEntry=null){
   return false;
  }
  // Aguarda o HLS/arquivo realmente ficar pronto para reproduzir.
- const result=await waitForSourceReady(stream,token,stream._torrent?18000:9000);
+ // O conversor do Stremio leva de 8 a 15 s para entregar o primeiro pedaço.
+ const result=await waitForSourceReady(stream,token,stream._torrent?18000:stream._relay?30000:9000);
  if(token!==S.sourceAttemptToken)return false;
  if(result.ok){
   setHealth(stream,"working");
@@ -1653,7 +1709,8 @@ async function autoChooseWorkingSource(resumeEntry=null,autoplay=true){
  if(!ranked.length)return null;
  const found=await trySourcesInOrder(ranked,autoplay,resumeEntry,true);
  if(!found){
-  toast("Nenhuma das fontes testadas iniciou. Escolha outra manualmente na lista.");
+  const waiting=(S.streams||[]).some(s=>s._relay)&&!S.stremioServer;
+  toast(waiting?"FenixFlix e Zeus precisam do app Stremio aberto neste computador. Abra o Stremio e toque em “Tentar fontes”.":"Nenhuma das fontes testadas iniciou. Escolha outra manualmente na lista.");
   renderSourceUI();
  }
  return found;
@@ -2118,6 +2175,7 @@ async function playStream(type,id,title,meta,resumeEntry=null){
  S.streamTitle=title||"video";S.streamMeta=meta||{id,type,name:title};S.playType=type;S.playId=id;S.resolvedStreamId=null;S.introSkipped=false;$("#skipIntroBtn").classList.remove("show");S.rootId=type==="series"?(S.currentShow?.id||resumeEntry?.rootId||meta?.id):(resumeEntry?.rootId||meta?.id||id);S.resumeEntry=resumeEntry;S.resumeApplied=false;S.streams=[];S.selectedStream=null;S.selectedAddon="all";S.qualityFilter="all";resetSourceWindow();S.externalSubtitles=[];S.sourceHealth.clear();S.addonQueryStatus.clear();S.attemptedSourceKeys.clear();S._lastProgressSave=0;updatePlayerDownloadButton(null);
  window.dispatchEvent(new CustomEvent("resenhaflix:party-media",{detail:partyMediaDescriptor()}));
  configuredStreamManifests().forEach((manifest,index)=>S.addonQueryStatus.set(manifest,{name:quickAddonName(manifest,index),status:"loading",count:0,at:Date.now()}));
+ detectStremioServer();
  resetVideo();showPlayerUI(true);
  $("#qualityFilters").innerHTML="";renderSourceUI();
  try{
@@ -3665,7 +3723,7 @@ $("#installAppBtn").onclick=async()=>{
 };
 window.addEventListener("appinstalled",()=>{deferredInstallPrompt=null;$("#installAppBtn").style.display="none";toast("ResenhaFlix instalado como aplicativo.")});
 if("serviceWorker" in navigator){
- window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=71",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
+ window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=72",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
 }
 home();
 // v71: deixa os manifestos das fontes prontos antes do primeiro "Assistir".

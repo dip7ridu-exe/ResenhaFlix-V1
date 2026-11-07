@@ -9,10 +9,10 @@ const [app, html, worker, playerCss] = await Promise.all([
   readFile(new URL("resenhaflix.css", root), "utf8")
 ]);
 
-assert.match(html, /<script src="\.\/app\.js\?v=71"><\/script>/);
-assert.match(html, /<script src="\.\/watch-party\.js\?v=71"><\/script>/);
+assert.match(html, /<script src="\.\/app\.js\?v=72"><\/script>/);
+assert.match(html, /<script src="\.\/watch-party\.js\?v=72"><\/script>/);
 assert.match(html, /<link rel="stylesheet" href="https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css">/);
-assert.match(html, /<link rel="stylesheet" href="\.\/resenhaflix\.css\?v=71">/);
+assert.match(html, /<link rel="stylesheet" href="\.\/resenhaflix\.css\?v=72">/);
 assert.doesNotMatch(html, /<style>/, "estilos ficam em arquivo externo (cache)");
 assert.doesNotMatch(html, /data-page="trending"/, "aba Em alta removida");
 const markup = html;
@@ -78,9 +78,9 @@ assert.match(playerCss, /\.listLibraryTools/);
 assert.match(playerCss, /body\.playerOpen>#top/);
 assert.match(playerCss, /\.mobileSearchPanel\.open/);
 assert.match(playerCss, /\.playerSide\.drawerOpen/);
-assert.match(worker, /resenhaflix-shell-v71/);
-assert.match(worker, /\.\/app\.js\?v=71/);
-assert.match(worker, /\.\/watch-party\.js\?v=71/);
-assert.match(worker, /\.\/resenhaflix\.css\?v=71/);
+assert.match(worker, /resenhaflix-shell-v72/);
+assert.match(worker, /\.\/app\.js\?v=72/);
+assert.match(worker, /\.\/watch-party\.js\?v=72/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=72/);
 
 console.log("video v61: resilient sources, direct watch-party invites and authorized downloads OK");

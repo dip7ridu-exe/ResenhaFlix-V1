@@ -15,7 +15,7 @@ assert.match(app, /function setSkipIntroEnabled/);
 
 // Bootstrap carregado antes do tema do site, e tema escuro ativado.
 const bootstrapIndex = html.indexOf("bootstrap@5.3.3/dist/css/bootstrap.min.css");
-const themeIndex = html.indexOf("./resenhaflix.css?v=71");
+const themeIndex = html.indexOf("./resenhaflix.css?v=72");
 assert.ok(bootstrapIndex >= 0 && themeIndex > bootstrapIndex, "resenhaflix.css deve carregar depois do Bootstrap");
 assert.match(html, /<html lang="pt-BR" data-bs-theme="dark">/);
 
@@ -39,8 +39,8 @@ const parsedManifest = JSON.parse(manifest);
 assert.equal(parsedManifest.background_color, "#08070c");
 assert.ok(parsedManifest.icons.every(icon => icon.src.endsWith("?v=70")), "PWA icons must bypass older caches");
 assert.match(html, /\.\/icons\/resenhaflix-logo\.png\?v=70/);
-assert.match(worker, /resenhaflix-shell-v71/);
-assert.match(worker, /\.\/resenhaflix\.css\?v=71/);
+assert.match(worker, /resenhaflix-shell-v72/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=72/);
 
 const iconSizes = new Map([
   ["icons/icon-192.png", [192, 192]],
