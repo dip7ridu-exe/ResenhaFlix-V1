@@ -12,12 +12,12 @@ test("v70: menu de downloads para Windows e Android está integrado", () => {
   assert.match(html, /aria-controls="appDownloadMenu"/);
   assert.match(html, /Navegar-na-Resenha-Windows-x64-v0\.1\.0\.zip/);
   assert.match(html, /Navegar-na-Resenha-Android-universal-v0\.1\.0\.apk/);
-  assert.match(html, /download-menu\.js\?v=70/);
+  assert.match(html, /download-menu\.js\?v=71/);
   assert.match(css, /\.appDownloadMenu\[hidden\]/);
   assert.match(css, /@media\(max-width:900px\)/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(js, /event\.key === "Escape"/);
   assert.match(js, /trigger\.setAttribute\("aria-expanded", "true"\)/);
-  assert.match(sw, /resenhaflix-shell-v70/);
-  assert.match(sw, /download-menu\.js\?v=70/);
+  assert.match(sw, /resenhaflix-shell-v71/);
+  assert.match(sw, /download-menu\.js\?v=71/);
 });

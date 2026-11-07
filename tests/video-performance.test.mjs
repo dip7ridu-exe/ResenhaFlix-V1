@@ -9,20 +9,23 @@ const [app, html, worker, playerCss] = await Promise.all([
   readFile(new URL("resenhaflix.css", root), "utf8")
 ]);
 
-assert.match(html, /<script src="\.\/app\.js\?v=70"><\/script>/);
-assert.match(html, /<script src="\.\/watch-party\.js\?v=70"><\/script>/);
+assert.match(html, /<script src="\.\/app\.js\?v=71"><\/script>/);
+assert.match(html, /<script src="\.\/watch-party\.js\?v=71"><\/script>/);
 assert.match(html, /<link rel="stylesheet" href="https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css">/);
-assert.match(html, /<link rel="stylesheet" href="\.\/resenhaflix\.css\?v=70">/);
+assert.match(html, /<link rel="stylesheet" href="\.\/resenhaflix\.css\?v=71">/);
 assert.doesNotMatch(html, /<style>/, "estilos ficam em arquivo externo (cache)");
 assert.doesNotMatch(html, /data-page="trending"/, "aba Em alta removida");
 const markup = html;
 assert.doesNotMatch(markup, /data-page="music"|id="musicMiniPlayer"|data-media-source-pane="music"/i);
 assert.doesNotMatch(app, /SoundCloud|Audius|iTunes|musicPage|globalMusic/i);
 
+// v71: fontes principais na ordem pedida (iguais às do Stremio); BestCine vira extra.
 const sourceOrder = [
-  "https://bestcine.alwaysdata.net/manifest.json",
+  "https://fenixflix.fenixhub.online/manifest.json",
+  "https://zeus-br.shardweb.app/manifest.json",
+  "https://addon.notorrent2.workers.dev/manifest.json",
   "https://froststream.cloutteam.com/manifest.json",
-  "https://fenixflix.fenixhub.online/manifest.json"
+  "https://bestcine.alwaysdata.net/manifest.json"
 ];
 let last = -1;
 for (const source of sourceOrder) {
@@ -57,7 +60,7 @@ assert.match(app, /if\(!stream\?\._officialLegal\|\|stream\?\._torrent\)return "
 assert.match(app, /function bindSourceUiEvents/);
 assert.match(app, /function bindPageInfinite/);
 assert.match(app, /behavior:reduced\|\|innerWidth<=760\?"auto":"smooth"/);
-assert.match(app, /if\(s&&!s\.url&&!s\.externalUrl&&s\.infoHash\)return null/);
+assert.match(app, /if\(!s\.url&&!s\.externalUrl&&s\.infoHash\)return null/);
 assert.match(app, /skipIntroEnabled:localStorage\.getItem\("rf55_skip_intro_enabled"\)/);
 assert.match(app, /function setSkipIntroEnabled/);
 assert.match(app, /function playableSeriesEpisodes/);
@@ -75,9 +78,9 @@ assert.match(playerCss, /\.listLibraryTools/);
 assert.match(playerCss, /body\.playerOpen>#top/);
 assert.match(playerCss, /\.mobileSearchPanel\.open/);
 assert.match(playerCss, /\.playerSide\.drawerOpen/);
-assert.match(worker, /resenhaflix-shell-v70/);
-assert.match(worker, /\.\/app\.js\?v=70/);
-assert.match(worker, /\.\/watch-party\.js\?v=70/);
-assert.match(worker, /\.\/resenhaflix\.css\?v=70/);
+assert.match(worker, /resenhaflix-shell-v71/);
+assert.match(worker, /\.\/app\.js\?v=71/);
+assert.match(worker, /\.\/watch-party\.js\?v=71/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=71/);
 
 console.log("video v61: resilient sources, direct watch-party invites and authorized downloads OK");

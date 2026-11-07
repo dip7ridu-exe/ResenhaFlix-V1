@@ -1,9 +1,13 @@
 // ResenhaFlix — versão simplificada baseada no site funcional
+// v71: fontes principais, na ordem de prioridade (as mesmas do Stremio).
 const CORE_STREAM_MANIFESTS=[
-  "https://bestcine.alwaysdata.net/manifest.json",
-  "https://froststream.cloutteam.com/manifest.json",
-  "https://fenixflix.fenixhub.online/manifest.json"
+  "https://fenixflix.fenixhub.online/manifest.json",
+  "https://zeus-br.shardweb.app/manifest.json",
+  "https://addon.notorrent2.workers.dev/manifest.json",
+  "https://froststream.cloutteam.com/manifest.json"
 ];
+// Fontes extras: entram por padrão depois das principais, mas podem ser removidas nas Configurações.
+const OPTIONAL_STREAM_MANIFESTS=["https://bestcine.alwaysdata.net/manifest.json"];
 const BLOCKED_STREAM_HOSTS=new Set(["torrentio.strem.fun","comet.elfhosted.com","mediafusion.elfhosted.com"]);
 const CATALOG_ONLY_HOSTS=new Set(["apps.soluserv.es"]);
 const REQUIRED_STREAM_MANIFESTS=[...CORE_STREAM_MANIFESTS];
@@ -14,7 +18,7 @@ const REQUIRED_CATALOG_MANIFESTS=[
   "https://apps.soluserv.es/stremio_catalog_plus/manifest.json"
 ];
 const CFG_DEFAULT={
-  frost:REQUIRED_STREAM_MANIFESTS.join("\n"),
+  frost:[...REQUIRED_STREAM_MANIFESTS,...OPTIONAL_STREAM_MANIFESTS].join("\n"),
   meta:TMDB_PTBR_MANIFEST,
   catalogs:REQUIRED_CATALOG_MANIFESTS.join("\n"),
   subtitleAddon:"https://opensubtitles-v3.strem.io/manifest.json",
@@ -241,10 +245,23 @@ function langLabel(x){
 }
 
 const MANIFEST_DATA=new Map();
+const MANIFEST_STORE_KEY="rf71_manifests",MANIFEST_TTL=24*3600e3;
+let manifestStore={};
+try{manifestStore=JSON.parse(localStorage.getItem(MANIFEST_STORE_KEY)||"{}")||{}}catch{manifestStore={}}
+for(const [url,entry] of Object.entries(manifestStore)){if(entry?.data)MANIFEST_DATA.set(url,entry.data)}
+function rememberManifest(url,data){
+ try{
+  const slim={id:data.id,name:data.name,version:data.version,resources:data.resources,types:data.types,idPrefixes:data.idPrefixes,catalogs:(data.catalogs||[]).map(c=>({type:c.type,id:c.id,name:c.name,extra:c.extra,extraSupported:c.extraSupported,extraRequired:c.extraRequired}))};
+  manifestStore[url]={at:Date.now(),data:slim};
+  localStorage.setItem(MANIFEST_STORE_KEY,JSON.stringify(manifestStore));
+ }catch{}
+}
 async function getManifest(manifestUrl){
   if(S.manifestCache.has(manifestUrl))return S.manifestCache.get(manifestUrl);
+  const stored=manifestStore[manifestUrl];
+  if(stored?.data&&Date.now()-stored.at<MANIFEST_TTL){const ready=Promise.resolve(stored.data);S.manifestCache.set(manifestUrl,ready);return ready}
   const timeout=REQUIRED_STREAM_MANIFESTS.includes(manifestUrl)?10000:REQUIRED_CATALOG_MANIFESTS.includes(manifestUrl)?7500:3500;
-  const p=getJSONTimeout(manifestUrl,timeout).then(data=>{MANIFEST_DATA.set(manifestUrl,data);return data}).catch(e=>{S.manifestCache.delete(manifestUrl);throw e});
+  const p=getJSONTimeout(manifestUrl,timeout).then(data=>{MANIFEST_DATA.set(manifestUrl,data);rememberManifest(manifestUrl,data);return data}).catch(e=>{S.manifestCache.delete(manifestUrl);throw e});
   S.manifestCache.set(manifestUrl,p);return p;
 }
 // Respeita o manifesto do addon (resources/types/idPrefixes) para não fazer chamadas inúteis.
@@ -282,6 +299,14 @@ async function getCatalog(manifest,type,id,params=""){
  manifest=normalizeCatalogManifest(manifest);
  const key=[manifest,type,id,normalizeExtra(params)].join("|");
  if(S.catalogCache.has(key))return S.catalogCache.get(key);
+ const saved=loadCatalogStore()[key];
+ if(saved?.items?.length&&Date.now()-saved.at<CATALOG_MAX_AGE&&!(params&&typeof params==="object"&&params.search)){
+  const items=saved.items.map(m=>{rememberPortuguese(m);return cachedPortuguese(m)});
+  const ready=Promise.resolve(items);
+  S.catalogCache.set(key,ready);
+  if(Date.now()-saved.at>CATALOG_FRESH_MS)runWhenIdle(()=>refreshCatalogInBackground(manifest,type,id,params,key));
+  return ready;
+ }
  const load=async(source)=>{
   const tmdb=isTmdbManifest(source),catalogId=tmdb&&id==="top"?"tmdb.top":!tmdb&&id==="tmdb.top"?"top":id;
   const data=await getJSONTimeout(catalogURLFor(source,type,catalogId,tmdb?catalogParamsPT(type,params):params),tmdb?5000:6000);
@@ -291,8 +316,37 @@ async function getCatalog(manifest,type,id,params=""){
   S.catalogCache.delete(key);
   if(isTmdbManifest(manifest)&&["top","tmdb.top"].includes(id))return load(CINEMETA_MANIFEST);
   throw error;
- });
+ }).then(items=>{if(items?.length&&!(params&&typeof params==="object"&&params.search))storeCatalog(key,items);return items});
  S.catalogCache.set(key,p);return p;
+}
+function refreshCatalogInBackground(manifest,type,id,params,key){
+ S.catalogCache.delete(key);
+ const store=loadCatalogStore(),saved=store[key];
+ delete store[key];
+ getCatalog(manifest,type,id,params).catch(()=>{if(saved)store[key]=saved}).finally(()=>{
+  // a página atual continua usando a cópia salva; a nova lista vale na próxima abertura
+  if(saved&&!store[key])store[key]=saved;
+ });
+}
+// v71: catálogos guardados no aparelho. A lista aparece na hora com a cópia salva
+// e é atualizada pela rede em segundo plano (fica pronta para a próxima vez).
+const CATALOG_STORE_KEY="rf71_catalogs",CATALOG_FRESH_MS=3*3600e3,CATALOG_MAX_AGE=3*86400e3,CATALOG_STORE_MAX=36;
+let catalogStore=null,catalogStoreTimer=0;
+function loadCatalogStore(){
+ if(catalogStore)return catalogStore;
+ try{catalogStore=JSON.parse(localStorage.getItem(CATALOG_STORE_KEY)||"{}")||{}}catch{catalogStore={}}
+ return catalogStore;
+}
+function slimMeta(m){
+ return {id:m.id,type:m.type,name:m.name,poster:m.poster,background:m.background,year:m.year,releaseInfo:m.releaseInfo,imdbRating:m.imdbRating,runtime:m.runtime,genres:(m.genres||[]).slice(0,4),description:String(m.description||"").slice(0,320),imdb_id:m.imdb_id,_metadataLanguage:m._metadataLanguage,_catalogManifest:m._catalogManifest};
+}
+function storeCatalog(key,items){
+ const store=loadCatalogStore();
+ store[key]={at:Date.now(),items:items.slice(0,40).map(slimMeta)};
+ const keys=Object.keys(store);
+ if(keys.length>CATALOG_STORE_MAX)keys.sort((a,b)=>store[a].at-store[b].at).slice(0,keys.length-CATALOG_STORE_MAX).forEach(k=>delete store[k]);
+ clearTimeout(catalogStoreTimer);
+ catalogStoreTimer=setTimeout(()=>{try{localStorage.setItem(CATALOG_STORE_KEY,JSON.stringify(store))}catch{try{localStorage.removeItem(CATALOG_STORE_KEY)}catch{}}},600);
 }
 
 let listMemory=null,historyMemory=null,sourceStatsMemory=null,seriesPrefsMemory=null,introProfilesMemory=null;
@@ -513,6 +567,9 @@ function sourceReliabilityScore(s,resumeEntry=null){
  if(S.primaryManifest&&s._manifest===S.primaryManifest)score+=35;
  score+=configuredManifestPriority(s._manifest);
  if(s._torrent)score-=260;
+ if(s._needsHeaders)score-=120; // exigem cabeçalhos que o navegador não envia
+ if(s._trial)score-=150;        // links de teste/debrid costumam pedir cadastro
+ if(s._notWebReady)score-=25;   // feitos para o app; no navegador às vezes abrem
  if(s._external)score-=500;
  if(s._mismatch)score-=900;
  return score;
@@ -1199,6 +1256,8 @@ function quickAddonName(manifest,index){
  if(S.addonNameCache.has(manifest))return S.addonNameCache.get(manifest);
  const low=String(manifest).toLowerCase();let name="";
  if(low.includes("bestcine"))name="BestCine";
+ else if(low.includes("zeus-br"))name="Zeus";
+ else if(low.includes("notorrent"))name="NoTorrent";
  else if(low.includes("froststream"))name="FrostStream";
  else if(low.includes("fenixflix"))name="FenixFlix";
  else if(low.includes("watchhub"))name="WatchHub";
@@ -1241,6 +1300,8 @@ function streamRequestTimeout(manifest){
  const value=String(manifest||"").toLowerCase();
  if(value.includes("froststream"))return 18000;
  if(value.includes("fenixflix"))return 14000;
+ if(value.includes("zeus-br"))return 12000;
+ if(value.includes("notorrent"))return 10000;
  if(value.includes("bestcine"))return 10000;
  return 8000;
 }
@@ -1257,19 +1318,46 @@ async function fetchStreamPayload(manifest,type,id){
   }
  }
 }
+// Links que as fontes misturam com os vídeos (doação, Discord, planos pagos).
+const PROMO_LINK_HOSTS=/(^|\.)(paypal\.com|paypal\.me|discord\.gg|discord\.com|patreon\.com|ko-fi\.com|buymeacoffee\.com|t\.me|telegram\.me|linktr\.ee)$/i;
+function isPromoStream(s){
+ const link=s.url||s.externalUrl||"";
+ try{if(PROMO_LINK_HOSTS.test(new URL(link).hostname))return true}catch{}
+ const text=`${s.name||""} ${s.title||""}`;
+ return !s.url&&/upgrade|donat|doa[çc][aã]o|join our|premium streams available|apoie|assine/i.test(text);
+}
+function hasRequestHeaders(s){
+ const own=s.headers&&typeof s.headers==="object"?Object.keys(s.headers).length:0;
+ const proxied=s.behaviorHints?.proxyHeaders?.request;
+ return own>0||(proxied&&typeof proxied==="object"&&Object.keys(proxied).length>0);
+}
+function looksLikeHls(s){
+ const text=[s.url,s.behaviorHints?.filename,s.type].filter(Boolean).join(" ");
+ return /\.m3u8($|[?#\s])|[\/=._-]m3u8\b|\bhls\b/i.test(text);
+}
+async function waitForManifest(manifest,ms=2500){
+ if(MANIFEST_DATA.has(manifest))return;
+ await Promise.race([getManifest(manifest).catch(()=>null),new Promise(r=>setTimeout(r,ms))]);
+}
 async function fetchStreamBatch(manifest,type,id,index,{fresh=false}={}){
  if(!fresh){const cached=getCachedStreamBatch(manifest,type,id);if(cached)return cached}
  const name=quickAddonName(manifest,index);
- getManifest(manifest).catch(()=>null);
+ // Espera (no máximo 2,5 s) o manifesto para não pedir vídeo a quem não tem aquele tipo de título.
+ await waitForManifest(manifest);
  if(!addonSupports(manifest,"stream",type,id)){saveStreamBatch(manifest,type,id,[]);return []}
  const data=await fetchStreamPayload(manifest,type,id);
  const officialLegal=/watchhub\.strem\.io/i.test(manifest);
- const streams=(data.streams||[]).map(s=>{
-  if(s&&!s.url&&!s.externalUrl&&s.infoHash)return null;
-  if(s&&!s.url&&!s.externalUrl&&s.ytId)return {...s,externalUrl:`https://www.youtube.com/watch?v=${encodeURIComponent(s.ytId)}`};
+ const streams=(Array.isArray(data?.streams)?data.streams:[]).map(s=>{
+  if(!s||typeof s!=="object")return null;
+  if(!s.url&&!s.externalUrl&&s.infoHash)return null;
+  if(!s.url&&!s.externalUrl&&s.ytId)return {...s,externalUrl:`https://www.youtube.com/watch?v=${encodeURIComponent(s.ytId)}`};
+  // Padrão novo do Stremio: "description" no lugar de "title".
+  if(!s.title&&s.description)return {...s,title:s.description};
   return s;
- }).filter(x=>x&&(x.url||x.externalUrl)).map((s,i)=>{
-  const x={...s,_addon:name,_manifest:manifest,_idx:i,_quality:getQuality(s),_external:!s.url&&!s._torrent&&!!s.externalUrl,_officialLegal:officialLegal};
+ }).filter(x=>x&&(x.url||x.externalUrl)&&!isPromoStream(x)).map((s,i)=>{
+  const text=`${s.name||""} ${s.title||""}`;
+  const x={...s,_addon:name,_manifest:manifest,_idx:i,_quality:getQuality(s),_external:!s.url&&!s._torrent&&!!s.externalUrl,_officialLegal:officialLegal,
+   _hls:!!s.url&&looksLikeHls(s),_needsHeaders:hasRequestHeaders(s),_notWebReady:!!s.behaviorHints?.notWebReady,_trial:/free\s*trial|debrid|premiumize|linksnappy|alldebrid/i.test(text)};
   x._provider=detectProvider(x);x._mismatch=streamLooksMismatched(x,S.streamMeta,type);return x;
  });
  saveStreamBatch(manifest,type,id,streams);return streams;
@@ -1590,6 +1678,7 @@ async function selectStream(stream,autoplay=true,resumeEntry=null){
  const found=await trySourcesInOrder(ranked,autoplay,liveResume,false);
  if(!found)toast("Não encontrei outra fonte funcional automaticamente.");
 }
+const SUBTITLE_CACHE=new Map();
 async function fetchExternalSubtitles(type,id,stream){
  S.externalSubtitles=[];
  const manifest=cfg.subtitleAddon;
@@ -1603,7 +1692,8 @@ async function fetchExternalSubtitles(type,id,stream){
   if(bh.filename)parts.push(`filename=${encodeURIComponent(bh.filename)}`);
   const root=base(manifest);
   const url=root+`/subtitles/${type}/${encodeURIComponent(id)}${parts.length?("/"+parts.join("&")):""}.json`;
-  const d=await getJSON(url);
+  if(!SUBTITLE_CACHE.has(url))SUBTITLE_CACHE.set(url,getJSONTimeout(url,5000).catch(e=>{SUBTITLE_CACHE.delete(url);throw e}));
+  const d=await SUBTITLE_CACHE.get(url);
   S.externalSubtitles=(d.subtitles||[]).map((x,i)=>({...x,_external:true,_idx:i}));
  }catch(e){console.warn("legendas externas",e);S.externalSubtitles=[]}
  return S.externalSubtitles;
@@ -2039,7 +2129,7 @@ async function playStream(type,id,title,meta,resumeEntry=null){
    if(autoStarted||loadToken!==S.streamLoadToken||!rankedPlayableStreams(S.streams,resumeEntry).length)return autoPromise;
    autoStarted=true;
    if(resumeEntry?.stream?.provider)toast(`Procurando novamente ${resumeEntry.stream.provider}…`);
-   autoPromise=autoChooseWorkingSource(resumeEntry,partyAutoplay).then(async found=>{if(found)await fetchExternalSubtitles(type,streamId,found);return found});
+   autoPromise=autoChooseWorkingSource(resumeEntry,partyAutoplay);
    return autoPromise;
   };
   const allPromise=loadStreamsFromAddons(type,streamId,(batch)=>{
@@ -2057,7 +2147,6 @@ async function playStream(type,id,title,meta,resumeEntry=null){
   // tenta novamente após os addons mais lentos terminarem de chegar.
   if(!found&&rankedPlayableStreams(S.streams,resumeEntry).length){
    found=await autoChooseWorkingSource(resumeEntry,partyAutoplay);
-   if(found)await fetchExternalSubtitles(type,streamId,found);
   }
   if(!receivedAny&&!S.streams.length){$("#sources").innerHTML="<div class='sourceEmpty'>Nenhuma fonte foi retornada pelos addons configurados.</div>";return}
  }catch(e){console.error(e);$("#sources").innerHTML="<div class='sourceEmpty'>Falha ao consultar as fontes. Verifique CORS, o manifesto e a disponibilidade do addon.</div>"}
@@ -2263,9 +2352,19 @@ async function loadVideo(url,autoplay=true,stream=null,resumeEntry=null){
       try{v.currentTime=safe;S.resumeApplied=true;toast(`Continuando em ${formatTime(safe)}.`)}catch{}
     }else S.resumeApplied=true;
   };
-  const afterTracks=async()=>{applyPreferredAudio();if(S.playType&&S.playId){await fetchExternalSubtitles(S.playType,S.playId,stream||S.selectedStream);await applyPreferredSubtitle()}updateTrackStatus()};
-  v.addEventListener("loadedmetadata",async()=>{applyAspectMode(S.aspectMode,false);applyResume();await afterTracks();$("#buffering").classList.remove("show");if(autoplay)v.play().catch(()=>{})},{once:true});
-  if(/\.m3u8($|\?)/i.test(url)){
+  // v71: legendas são buscadas em segundo plano; o vídeo começa sem esperar por elas.
+  const afterTracks=()=>{applyPreferredAudio();updateTrackStatus();if(S.playType&&S.playId){fetchExternalSubtitles(S.playType,S.resolvedStreamId||S.playId,stream||S.selectedStream).then(()=>applyPreferredSubtitle()).then(updateTrackStatus).catch(()=>{})}};
+  v.addEventListener("loadedmetadata",()=>{applyAspectMode(S.aspectMode,false);applyResume();$("#buffering").classList.remove("show");if(autoplay)v.play().catch(()=>{});afterTracks()},{once:true});
+  // Links sem ".m3u8" que são HLS (redirecionamentos): se o navegador recusar, tenta com hls.js uma vez.
+  if(!stream?._hls&&!/\.m3u8($|\?)/i.test(url)&&!/\.(mp4|webm|mkv|mov|m4v)($|\?)/i.test(url)){
+   v.addEventListener("error",()=>{
+    if(v.error?.code!==4||!stream||stream._hlsRetried)return;
+    stream._hlsRetried=true;stream._hls=true;
+    console.info("Fonte sem extensão: tentando como HLS",url);
+    loadVideo(url,autoplay,stream,resumeEntry);
+   },{once:true});
+  }
+  if(stream?._hls||/\.m3u8($|\?)/i.test(url)){
     try{
      await ensureHlsLibrary();
      if(window.Hls&&Hls.isSupported()){
@@ -2286,7 +2385,7 @@ async function loadVideo(url,autoplay=true,stream=null,resumeEntry=null){
        highBufferWatchdogPeriod:2
       });
       v._hls.loadSource(url);v._hls.attachMedia(v);
-      v._hls.on(Hls.Events.MANIFEST_PARSED,async()=>{await afterTracks();$("#buffering").classList.remove("show")});
+      v._hls.on(Hls.Events.MANIFEST_PARSED,()=>{$("#buffering").classList.remove("show")});
       if(Hls.Events.AUDIO_TRACKS_UPDATED)v._hls.on(Hls.Events.AUDIO_TRACKS_UPDATED,()=>{applyPreferredAudio();updateTrackStatus()});
       if(Hls.Events.SUBTITLE_TRACKS_UPDATED)v._hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,()=>{applyPreferredSubtitle();updateTrackStatus()});
       let hlsNetworkRecoveries=0,hlsMediaRecoveries=0;
@@ -3566,6 +3665,8 @@ $("#installAppBtn").onclick=async()=>{
 };
 window.addEventListener("appinstalled",()=>{deferredInstallPrompt=null;$("#installAppBtn").style.display="none";toast("ResenhaFlix instalado como aplicativo.")});
 if("serviceWorker" in navigator){
- window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=70",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
+ window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=71",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
 }
 home();
+// v71: deixa os manifestos das fontes prontos antes do primeiro "Assistir".
+runWhenIdle(()=>configuredStreamManifests().forEach(m=>getManifest(m).catch(()=>{})));
