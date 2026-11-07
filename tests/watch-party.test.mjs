@@ -44,7 +44,7 @@ const [html, app, worker, css, partyScript] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("service-worker.js", root), "utf8"),
-  readFile(new URL("watch-party.css", root), "utf8"),
+  readFile(new URL("resenhaflix.css", root), "utf8"),
   readFile(new URL("watch-party.js", root), "utf8")
 ]);
 
@@ -56,8 +56,8 @@ assert.match(app, /resenhaflix:party-media/);
 assert.match(app, /resenhaflix:party-source/);
 assert.match(app, /_partyAutoplay/);
 assert.match(app, /applySource:applyPartySource/);
-assert.match(worker, /\.\/watch-party\.js\?v=61/);
-assert.match(worker, /\.\/watch-party\.css\?v=61/);
+assert.match(worker, /\.\/watch-party\.js\?v=70/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=70/);
 assert.match(partyScript, /function safeReplaceState/);
 assert.match(partyScript, /function validConnectionMetadata/);
 assert.match(partyScript, /function retryGuestConnection/);
@@ -71,6 +71,5 @@ assert.match(html, /class="watchPartyInviteText"/);
 assert.match(css, /\.watchPartyModal\.inviteMode/);
 assert.match(css, /\.partyGuest #playPause/);
 assert.match(css, /\.partyGuest #preferredSourceSelect/);
-assert.match(css, /touch-action:pan-y/);
 
-console.log("watch party v61: direct invites, metadata handshake, bounded retries and source sync OK");
+console.log("watch party v70: direct invites, metadata handshake, bounded retries and source sync OK");

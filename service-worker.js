@@ -1,7 +1,16 @@
-const CACHE="resenhaflix-shell-v63";
-const SHELL=["./","./index.html","./app.js?v=62","./catalog-ptbr.js?v=62","./watch-party.js?v=61","./watch-party.css?v=61","./manifest.webmanifest","./books-v62.css?v=62","./ui-polish.css?v=50","./ui-polish.js?v=56","./theme-v54.css?v=54","./player-v55.css?v=58","./download-menu.css?v=63","./download-menu.js?v=63","./icons/resenhaflix-logo.png?v=54","./icons/icon-192.png?v=54","./icons/icon-512.png?v=54","./icons/icon-maskable-512.png?v=54"];
+/* ResenhaFlix v70 — cache do app (PWA).
+   - Página: rede primeiro, cache como reserva (sempre pega a versão nova).
+   - Scripts, estilos e ícones versionados (?v=): cache primeiro. Como cada
+     atualização muda o ?v=, o arquivo novo é baixado só uma vez, e as visitas
+     seguintes abrem instantaneamente, sem baixar ~250 KB de JS de novo. */
+const CACHE="resenhaflix-shell-v70";
+const SHELL=["./","./index.html","./resenhaflix.css?v=70","./catalog-ptbr.js?v=70","./app.js?v=70","./watch-party.js?v=70","./download-menu.js?v=70","./manifest.webmanifest","./icons/resenhaflix-logo.png?v=70","./icons/icon-192.png?v=70","./icons/icon-512.png?v=70","./icons/icon-maskable-512.png?v=70"];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith("resenhaflix-shell-")&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+function store(request,response){
+ if(response&&response.ok)caches.open(CACHE).then(c=>c.put(request,response.clone()));
+ return response;
+}
 self.addEventListener("fetch",e=>{
  if(e.request.method!=="GET")return;
  const u=new URL(e.request.url);
@@ -9,22 +18,16 @@ self.addEventListener("fetch",e=>{
  if(e.request.mode==="navigate"){
   e.respondWith(fetch(e.request).then(r=>{
    if(r.ok)caches.open(CACHE).then(c=>c.put("./index.html",r.clone()));
-   return r
+   return r;
   }).catch(()=>caches.match("./index.html")));
-  return
+  return;
  }
- if(e.request.destination==="script"||e.request.destination==="style"){
-  e.respondWith(fetch(e.request,{cache:"no-store"}).then(r=>{
-   if(r.ok)caches.open(CACHE).then(c=>c.put(e.request,r.clone()));
-   return r
-  }).catch(()=>caches.match(e.request)));
-  return
+ if(u.searchParams.has("v")){
+  e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request).then(r=>store(e.request,r))));
+  return;
  }
  e.respondWith(caches.match(e.request).then(hit=>{
-  const fresh=fetch(e.request).then(r=>{
-   if(r.ok)caches.open(CACHE).then(c=>c.put(e.request,r.clone()));
-   return r
-  }).catch(()=>hit);
-  return hit||fresh
- }))
+  const fresh=fetch(e.request).then(r=>store(e.request,r)).catch(()=>hit);
+  return hit||fresh;
+ }));
 });

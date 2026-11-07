@@ -1,39 +1,46 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 
+// v70: visual único em resenhaflix.css por cima do Bootstrap 5.3.
 const root = new URL("../", import.meta.url);
-const [app, html, theme, player, manifest, worker] = await Promise.all([
+const [app, html, css, manifest, worker] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("index.html", root), "utf8"),
-  readFile(new URL("theme-v54.css", root), "utf8"),
-  readFile(new URL("player-v55.css", root), "utf8"),
+  readFile(new URL("resenhaflix.css", root), "utf8"),
   readFile(new URL("manifest.webmanifest", root), "utf8"),
   readFile(new URL("service-worker.js", root), "utf8")
 ]);
 
 assert.match(app, /function setSkipIntroEnabled/);
 
-for (const color of ["#6B5E90", "#100502", "#B5D0EC", "#204995", "#4B75FF"]) {
-  assert.match(theme, new RegExp(color, "i"), `${color} must be present in the visual theme`);
+// Bootstrap carregado antes do tema do site, e tema escuro ativado.
+const bootstrapIndex = html.indexOf("bootstrap@5.3.3/dist/css/bootstrap.min.css");
+const themeIndex = html.indexOf("./resenhaflix.css?v=70");
+assert.ok(bootstrapIndex >= 0 && themeIndex > bootstrapIndex, "resenhaflix.css deve carregar depois do Bootstrap");
+assert.match(html, /<html lang="pt-BR" data-bs-theme="dark">/);
+
+// Arquivos de CSS antigos não podem voltar a ser carregados.
+for (const old of ["ui-polish.css", "theme-v54.css", "player-v55.css", "watch-party.css", "books-v62.css", "download-menu.css", "styles.css"]) {
+  assert.ok(!html.includes(old), `${old} não deve ser carregado`);
+  await assert.rejects(access(new URL(old, root)), `${old} deve ter sido removido`);
 }
 
-const uiPolishIndex = html.indexOf('./ui-polish.css?v=50');
-const themeIndex = html.indexOf('./theme-v54.css?v=54');
-const playerIndex = html.indexOf('./player-v55.css?v=58');
-assert.ok(uiPolishIndex >= 0 && themeIndex > uiPolishIndex && playerIndex > themeIndex, "v58 player theme must load last");
-assert.match(player, /--rf-player-accent:#36b7f4/);
-assert.match(player, /width:100vw!important;height:100dvh!important/);
+// Regras de desempenho do novo tema (comentários ignorados).
+const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
+assert.doesNotMatch(rules, /backdrop-filter/, "backdrop-filter pesa muito em celulares");
+assert.doesNotMatch(rules, /filter:\s*blur/);
+assert.ok((css.match(/!important/g) || []).length < 20, "o tema não deve depender de !important");
+assert.match(css, /--rf-accent:#4b75ff/i);
+
 assert.match(html, /id="rf-icon-play"/);
 assert.match(html, /id="rf-icon-fullscreen"/);
 
 const parsedManifest = JSON.parse(manifest);
-assert.equal(parsedManifest.background_color, "#100502");
-assert.equal(parsedManifest.theme_color, "#4B75FF");
-assert.ok(parsedManifest.icons.every(icon => icon.src.endsWith("?v=54")), "PWA icons must bypass older caches");
-assert.match(html, /\.\/icons\/resenhaflix-logo\.png\?v=54/);
-assert.match(worker, /resenhaflix-shell-v63/);
-assert.match(worker, /\.\/theme-v54\.css\?v=54/);
-assert.match(worker, /\.\/player-v55\.css\?v=58/);
+assert.equal(parsedManifest.background_color, "#08070c");
+assert.ok(parsedManifest.icons.every(icon => icon.src.endsWith("?v=70")), "PWA icons must bypass older caches");
+assert.match(html, /\.\/icons\/resenhaflix-logo\.png\?v=70/);
+assert.match(worker, /resenhaflix-shell-v70/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=70/);
 
 const iconSizes = new Map([
   ["icons/icon-192.png", [192, 192]],
@@ -49,4 +56,4 @@ for (const [path, [expectedWidth, expectedHeight]] of iconSizes) {
   assert.equal(png.readUInt32BE(20), expectedHeight, `${path} height`);
 }
 
-console.log("visual v61: original palette, local SVG controls and full-screen player OK");
+console.log("visual v70: Bootstrap + resenhaflix.css, sem CSS antigo, ícones OK");

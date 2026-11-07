@@ -86,7 +86,7 @@
    party.context=adapter()?.getContext?.()||null;
    const title=party.context?.title||"Sala livre";
    nodes.context.querySelector("b").textContent=title;
-   nodes.context.querySelector("span").textContent=party.context?"A sala começará com este título.":"Crie agora e escolha o que assistir depois.";
+   nodes.context.querySelector(":scope>div>span").textContent=party.context?"A sala começará com este título.":"Crie agora e escolha o que assistir depois.";
    nodes.context.classList.toggle("empty",!party.context);
    nodes.create.textContent=party.context?"Criar sala com este título":"Criar sala agora";
    nodes.create.disabled=false;

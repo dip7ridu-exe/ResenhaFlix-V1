@@ -6,13 +6,16 @@ const [app, html, worker, playerCss] = await Promise.all([
   readFile(new URL("app.js", root), "utf8"),
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("service-worker.js", root), "utf8"),
-  readFile(new URL("player-v55.css", root), "utf8")
+  readFile(new URL("resenhaflix.css", root), "utf8")
 ]);
 
-assert.match(html, /<script src="\.\/app\.js\?v=62">\s*<\/script>/);
-assert.match(html, /<script src="\.\/watch-party\.js\?v=61"><\/script>/);
-assert.match(html, /<link rel="stylesheet" href="\.\/watch-party\.css\?v=61">/);
-const markup = html.slice(html.indexOf("</style>") + 8);
+assert.match(html, /<script src="\.\/app\.js\?v=70"><\/script>/);
+assert.match(html, /<script src="\.\/watch-party\.js\?v=70"><\/script>/);
+assert.match(html, /<link rel="stylesheet" href="https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css">/);
+assert.match(html, /<link rel="stylesheet" href="\.\/resenhaflix\.css\?v=70">/);
+assert.doesNotMatch(html, /<style>/, "estilos ficam em arquivo externo (cache)");
+assert.doesNotMatch(html, /data-page="trending"/, "aba Em alta removida");
+const markup = html;
 assert.doesNotMatch(markup, /data-page="music"|id="musicMiniPlayer"|data-media-source-pane="music"/i);
 assert.doesNotMatch(app, /SoundCloud|Audius|iTunes|musicPage|globalMusic/i);
 
@@ -69,13 +72,12 @@ assert.match(app, /data-list-category/);
 assert.doesNotMatch(app, /globalManga/);
 assert.match(playerCss, /content-visibility:auto/);
 assert.match(playerCss, /\.listLibraryTools/);
-assert.match(playerCss, /#top\{display:none!important\}/);
+assert.match(playerCss, /body\.playerOpen>#top/);
 assert.match(playerCss, /\.mobileSearchPanel\.open/);
-assert.match(playerCss, /#playerModal \.playerSide\.drawerOpen/);
-assert.match(worker, /resenhaflix-shell-v63/);
-assert.match(worker, /\.\/app\.js\?v=62/);
-assert.match(worker, /\.\/watch-party\.js\?v=61/);
-assert.match(worker, /\.\/watch-party\.css\?v=61/);
-assert.match(worker, /\.\/player-v55\.css\?v=58/);
+assert.match(playerCss, /\.playerSide\.drawerOpen/);
+assert.match(worker, /resenhaflix-shell-v70/);
+assert.match(worker, /\.\/app\.js\?v=70/);
+assert.match(worker, /\.\/watch-party\.js\?v=70/);
+assert.match(worker, /\.\/resenhaflix\.css\?v=70/);
 
 console.log("video v61: resilient sources, direct watch-party invites and authorized downloads OK");

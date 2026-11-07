@@ -73,10 +73,9 @@ S.globalVideosExpanded=false;
 
 const MOBILE_NAV_STORAGE="rf33_mobile_nav";
 const MOBILE_NAV_MAX_SHORTCUTS=3;
-const MOBILE_NAV_DEFAULT=["home","trending","movies"];
+const MOBILE_NAV_DEFAULT=["home","movies","series"];
 const MOBILE_NAV_ITEMS=[
  {id:"home",label:"Início",icon:"⌂"},
- {id:"trending",label:"Em alta",icon:"↗"},
  {id:"movies",label:"Filmes",icon:"▣"},
  {id:"series",label:"Séries",icon:"▤"},
  {id:"anime",label:"Animes",icon:"✦"},
@@ -929,7 +928,7 @@ async function home(){
  S.currentPage="home";S.pageCategory="all";setActiveNav("home");unlockMobileDocument();scrollPageTop();toggleCategoryMega(false);
  $("#page").classList.remove("searchPage","animePageModern");
  $("#hero").classList.remove("hidden");$("#main").classList.remove("hidden");$("#page").classList.add("hidden");
- $("#main").innerHTML='<div class="row">'+Array.from({length:8},()=>'<div class="skeleton card"></div>').join("")+'</div>';
+ $("#main").innerHTML='<div class="row" style="padding-top:calc(var(--rf-header) + 60px)">'+Array.from({length:8},()=>'<div class="skeleton"></div>').join("")+'</div>';
  try{
   const [movies,series,animeMovies,animeSeries,hist]=await Promise.all([
    freshCatalog("movie","top","",cfg.meta,"home-movies"),
@@ -957,9 +956,7 @@ async function home(){
    row("Escolhas para você",recommended.slice(0,18),"Filmes e séries reunidos como nos grandes streamings"),
    row("Filmes em destaque",movies,"Atualizado automaticamente"),
    row("Séries para maratonar",series,"Temporadas e episódios em sequência"),
-   row("Animes em destaque",allAnime,"Animação japonesa e novidades"),
-   row("Só mais um filme",movies.slice(8),"Sucessos de audiência"),
-   row("Só mais um episódio",series.slice(8),"Continue a maratona")
+   row("Animes em destaque",allAnime,"Animação japonesa e novidades")
   ].join("")||'<div class="empty">Nenhum catálogo retornado.</div>';
   bindCards($("#main"));initCarousels($("#main"));
   runWhenIdle(appendExternalHomeRows);
@@ -2597,7 +2594,7 @@ function toggleCategoryMega(force){
  box.setAttribute("aria-hidden",open?"false":"true");
 }
 function categoryTargetPage(){
- return ["movies","series","anime","list","trending"].includes(S.currentPage)?S.currentPage:"anime";
+ return ["movies","series","anime","list"].includes(S.currentPage)?S.currentPage:"anime";
 }
 function openGenreFromMega(genre){
  toggleCategoryMega(false);
@@ -2711,23 +2708,6 @@ async function aniListTrendingMedia(type="ANIME",perPage=18){
  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),7000);
  try{const r=await fetch(ANILIST_API,{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({query:gql,variables:{type,n:perPage}}),signal:ctl.signal});if(!r.ok)throw Error("AniList "+r.status);const d=await r.json();return d.data?.Page?.media||[]}finally{clearTimeout(timer)}
 }
-function socialSearchUrl(kind,title){const q=encodeURIComponent(`"${title}"`);if(kind==="tiktok")return`https://www.google.com/search?q=site%3Atiktok.com+${q}`;if(kind==="instagram")return`https://www.google.com/search?q=site%3Ainstagram.com+${q}`;return`https://trends.google.com/trends/explore?q=${encodeURIComponent(title)}`}
-function socialBuzzCard(item){const title=item.name||item._rfTitle||item.title?.romaji||item.title?.english||"Título",type=item._trendType||"Em alta";return`<article class="socialBuzz"><b>${esc(title)}</b><small>${esc(type)}</small><div class="socialLinks"><button type="button" data-social-kind="tiktok" data-social-title="${esc(title)}">TikTok</button><button type="button" data-social-kind="instagram" data-social-title="${esc(title)}">Instagram</button><button type="button" data-social-kind="google" data-social-title="${esc(title)}">Google Trends</button></div></article>`}
-function bindSocialBuzz(root){root.querySelectorAll("[data-social-kind]").forEach(b=>b.onclick=()=>window.open(socialSearchUrl(b.dataset.socialKind,b.dataset.socialTitle),"_blank","noopener,noreferrer"))}
-function aniTrendCard(m,type){const title=m.title?.english||m.title?.romaji||m.title?.native||"Anime",cover=m.coverImage?.extraLarge||m.coverImage?.large||"";return`<article class="aniResultCard aniTrendCard" data-ani-trend-title="${esc(title)}"><div class="aniResultCover" style="background-image:url('${esc(cover)}')"><div class="aniCatalogBadge">Em alta</div></div><div class="aniResultBody"><div class="aniResultTitle">${esc(title)}</div><div class="aniResultMeta">${esc(type)}${m.averageScore?` • ★ ${(m.averageScore/10).toFixed(1)}`:""}</div><div class="aniResultActions"><button type="button" data-ani-search>Buscar no ResenhaFlix</button></div></div></article>`}
-function bindAniTrendCards(root){root.querySelectorAll("[data-ani-trend-title]").forEach(card=>card.querySelector("[data-ani-search]").onclick=()=>search(card.dataset.aniTrendTitle,true))}
-async function trendingPage(){
- S.currentPage="trending";setActiveNav("trending");unlockMobileDocument();scrollPageTop();toggleCategoryMega(false);
- $("#hero").classList.add("hidden");$("#main").classList.add("hidden");$("#page").classList.remove("hidden","searchPage",);$("#pageTitle").textContent="Em alta";$("#pageBody").innerHTML='<div class="loading">Atualizando o radar…</div>';
- try{
-  const [movies,series,animeCatalog,aniAnime]=await Promise.all([freshCatalog("movie","top","",cfg.meta,"trend-movies"),freshCatalog("series","top","",cfg.meta,"trend-series"),freshCatalog("series","top",{genre:"Animation"},cfg.meta,"trend-anime-catalog"),aniListTrendingMedia("ANIME",14).catch(()=>[])]);
-  const anime=animeCatalog.slice(0,16),buzz=[...movies.slice(0,3).map(x=>({...x,_trendType:"Filme"})),...series.slice(0,3).map(x=>({...x,_trendType:"Série"})),...anime.slice(0,2).map(x=>({...x,_trendType:"Anime"}))];
-  const updated=new Date().toLocaleString("pt-BR",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
-  $("#pageBody").innerHTML=`<div class="trendingShell"><section class="trendingHero"><div class="trendingHeroText"><div class="trendingEyebrow">RADAR RESENHAFLIX</div><h2>Em alta agora</h2><p>Filmes, séries e animes que estão ganhando atenção. O ranking usa catálogos atualizados e tendências do AniList; o Radar Social facilita conferir a repercussão no TikTok, Instagram e Google Trends.</p></div><div class="trendingUpdated">Atualizado ${updated}</div></section><section class="socialRadar"><div class="socialRadarHead"><div><h3>Radar social</h3><p>Confira a repercussão do título com um toque. O ResenhaFlix não inventa números de redes que não fornecem um feed público anônimo.</p></div><span class="socialRadarBadge">SOCIAL</span></div><div class="socialBuzzList" id="socialBuzzList">${buzz.map(socialBuzzCard).join("")}</div></section><section class="trendingSection"><div class="trendingSectionHead"><h3>Filmes</h3><p>Atualização automática</p></div><div class="trendingRow" id="trendMovies">${movies.slice(0,18).map(card).join("")}</div></section><section class="trendingSection"><div class="trendingSectionHead"><h3>Séries</h3><p>Atualização automática</p></div><div class="trendingRow" id="trendSeries">${series.slice(0,18).map(card).join("")}</div></section><section class="trendingSection"><div class="trendingSectionHead"><h3>Animes</h3><p>Tendências atuais</p></div>${aniAnime.length?`<div class="trendingRow" id="trendAniLive">${aniAnime.slice(0,14).map(x=>aniTrendCard(x,"Anime")).join("")}</div>`:`<div class="trendingRow" id="trendAnime">${anime.map(card).join("")}</div>`}</section></div>`;
-  bindSocialBuzz($("#socialBuzzList"));bindCards($("#trendMovies"));bindCards($("#trendSeries"));if($("#trendAnime"))bindCards($("#trendAnime"));if($("#trendAniLive"))bindAniTrendCards($("#trendAniLive"));
- }catch(e){console.error(e);$("#pageBody").innerHTML='<div class="empty">Não foi possível atualizar o radar agora.</div>'}
-}
-
 /* Livros V24 */
 function bookLibrary(){try{return JSON.parse(localStorage.getItem("rf24_book_library")||"[]")}catch{return[]}}
 function saveBookLibrary(x){localStorage.setItem("rf24_book_library",JSON.stringify(x.slice(0,300)))}
@@ -3111,7 +3091,7 @@ function bindAnimeSpotlight() {
 }
 
 async function page(type,initialCategory="all"){
- if(type==="trending")return trendingPage();
+ if(type==="trending")return home(); // aba "Em alta" removida
  if(type==="anime")return animePage(initialCategory);
  if(type==="books")return booksPage();
  S.currentPage=type;S.pageTypeForCategories=type;S.pageCategory=initialCategory||"all";
@@ -3286,7 +3266,7 @@ async function search(rawQuery,force=false){
   ++S.searchToken;
   S.lastGlobalSearchQuery="";
   $("#searchTabs").innerHTML="";$("#searchMeta").textContent="Pesquisa global";
-  $("#searchResultsArea").innerHTML='<div class="mediaEmpty"><b>Pesquise em todo o ResenhaFlix.</b>Filmes, séries, animes e livros aparecem juntos. Mangás ficam na aba Mangás.</div>';
+  $("#searchResultsArea").innerHTML='<div class="mediaEmpty"><b>Pesquise em todo o ResenhaFlix.</b>Filmes, séries, animes e livros aparecem juntos.</div>';
   return
  }
  if(!force&&S.lastGlobalSearchQuery===q&&$("#globalVideos"))return;
@@ -3295,7 +3275,7 @@ async function search(rawQuery,force=false){
  S.globalVideoResults=[];S.globalVideosExpanded=false;
  $("#searchTabs").innerHTML="";
  $("#searchMeta").textContent=`Resultados globais para “${q}”`;
- $("#searchResultsArea").innerHTML=`<div class="globalSearchIntro"><div><h2>${esc(q)}</h2><p>Filmes, séries, animes e livros carregados em paralelo. Para mangás, use a pesquisa exclusiva da aba Mangás.</p></div></div>
+ $("#searchResultsArea").innerHTML=`<div class="globalSearchIntro"><div><h2>${esc(q)}</h2><p>Filmes, séries, animes e livros carregados em paralelo.</p></div></div>
   ${globalSectionShell("globalVideos","Filmes, séries e animes","",{carousel:true,videoToggle:true})}
   ${globalSectionShell("globalBooks","Livros")}`;
 
@@ -3552,14 +3532,13 @@ function openSettingsTab(name="geral"){
 }
 $$("[data-settings-tab]").forEach(b=>b.onclick=()=>openSettingsTab(b.dataset.settingsTab));
 $("#resetSettings").onclick=()=>{$("#frostUrl").value=CFG_DEFAULT.frost;$("#metaUrl").value=CFG_DEFAULT.meta;$("#catalogUrls").value=CFG_DEFAULT.catalogs;$("#subtitleAddon").value=CFG_DEFAULT.subtitleAddon;$("#audioPref").value=CFG_DEFAULT.audioPref;$("#subtitlePref").value=CFG_DEFAULT.subtitlePref;$("#skipIntroEnabled").value="1";if($("#corsProxyUrl"))$("#corsProxyUrl").value="";$("#lang").value=CFG_DEFAULT.lang};
-let scrollRAF=0,scrollEndTimer=0;
+// v70: o cabeçalho só é alterado quando muda de estado (antes a página inteira
+// era recalculada várias vezes por segundo durante a rolagem).
+let scrollRAF=0,topSolid=false;
+const topBar=$("#top");
 window.addEventListener("scroll",()=>{
- if(innerWidth<=760)return;
- document.body.classList.add("fastScrolling");
- clearTimeout(scrollEndTimer);
- scrollEndTimer=setTimeout(()=>document.body.classList.remove("fastScrolling"),110);
  if(scrollRAF)return;
- scrollRAF=requestAnimationFrame(()=>{scrollRAF=0;$("#top").classList.toggle("solid",scrollY>35)});
+ scrollRAF=requestAnimationFrame(()=>{scrollRAF=0;const solid=scrollY>35;if(solid!==topSolid){topSolid=solid;topBar.classList.toggle("solid",solid)}});
 },{passive:true});
 window.addEventListener("beforeunload",()=>persistPlaybackProgress(true));
 window.addEventListener("pageshow",()=>setTimeout(repairTouchState,0));
@@ -3587,8 +3566,6 @@ $("#installAppBtn").onclick=async()=>{
 };
 window.addEventListener("appinstalled",()=>{deferredInstallPrompt=null;$("#installAppBtn").style.display="none";toast("ResenhaFlix instalado como aplicativo.")});
 if("serviceWorker" in navigator){
- window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=61",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
+ window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js?v=70",{updateViaCache:"none"}).catch(e=>console.warn("Service Worker",e)));
 }
-window.addEventListener("scroll",()=>hideCardPreview(),{passive:true,capture:true});
-window.addEventListener("resize",()=>hideCardPreview());
 home();
